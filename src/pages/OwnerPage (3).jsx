@@ -33,19 +33,36 @@ function LogTab({ employees, today }) {
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [selfieView, setSelfieView] = useState(null)
+  const [error, setError] = useState(null)
   const [viewDate, setViewDate] = useState(today)
 
   useEffect(() => { fetchLogs(viewDate) }, [viewDate])
 
   async function fetchLogs(date) {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('attendance')
-      .select('*, employees(name, role, photo_url)')
-      .eq('date', date)
-      .order('check_in', { ascending: false })
-    if (error) console.error('LogTab error:', error)
-    setLogs(data || [])
+    setError(null)
+    try {
+      // First try: filter by date
+      const { data, error } = await supabase
+        .from('attendance')
+        .select('employee_id, date, check_in, check_out, status, is_late, late_minutes, gps_dist_in, doc_url, employees(name, role)')
+        .eq('date', date)
+        .order('check_in', { ascending: false })
+      if (error) {
+        setError(`Query error: ${error.message} (code: ${error.code})`)
+        // Fallback: try without date filter to see ALL records
+        const { data: all } = await supabase
+          .from('attendance')
+          .select('employee_id, date, check_in, check_out, status, is_late, late_minutes, gps_dist_in, doc_url, employees(name, role)')
+          .order('check_in', { ascending: false })
+          .limit(20)
+        setLogs(all || [])
+      } else {
+        setLogs(data || [])
+      }
+    } catch(e) {
+      setError(`Exception: ${e.message}`)
+    }
     setLoading(false)
   }
 
@@ -86,6 +103,11 @@ function LogTab({ employees, today }) {
         </div>
 
         {loading && <div style={{ fontSize: 12, color: C.mut, textAlign: 'center', padding: '1rem' }}>Memuat data...</div>}
+        {!loading && error && (
+          <div style={{ background: C.dngBg, border: `.5px solid ${C.dngBd}`, borderRadius: 8, padding: '10px 12px', fontSize: 11, color: C.dng, marginBottom: 8 }}>
+            ⚠ Error: {error} — coba klik Refresh atau jalankan SQL migration dulu di Supabase
+          </div>
+        )}
         {!loading && logs.length === 0 && (
           <div style={{ textAlign: 'center', padding: '1rem' }}>
             <div style={{ fontSize: 12, color: C.mut, marginBottom: 6 }}>Belum ada data untuk tanggal ini</div>
@@ -94,11 +116,8 @@ function LogTab({ employees, today }) {
         )}
         {!loading && logs.map(l => (
           <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '.5px solid #F0E8DC' }}>
-            <div style={{ width: 32, height: 32, borderRadius: '50%', background: C.lat, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 500, color: C.esp, flexShrink: 0, overflow: 'hidden' }}>
-              {l.employees?.photo_url
-                ? <img src={l.employees.photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : l.employees?.name?.split(' ').map(w => w[0]).join('').slice(0,2)
-              }
+            <div style={{ width: 32, height: 32, borderRadius: '50%', background: C.lat, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 500, color: C.esp, flexShrink: 0 }}>
+              {l.employees?.name?.split(' ').map(w => w[0]).join('').slice(0,2)}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 500, color: C.esp }}>{l.employees?.name}</div>
