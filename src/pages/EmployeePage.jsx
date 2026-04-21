@@ -236,9 +236,26 @@ export default function EmployeePage() {
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
         {/* Employee info */}
         <div style={{ background: C.esp, borderRadius: 12, padding: '10px 14px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 38, height: 38, borderRadius: '50%', background: C.lat, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 500, color: C.esp, flexShrink: 0 }}>
-            {user?.name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
-          </div>
+          <label style={{ position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
+            <div style={{ width: 42, height: 42, borderRadius: '50%', background: C.lat, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 500, color: C.esp, overflow: 'hidden', border: `2px solid ${C.lat}` }}>
+              {user?.photo_url
+                ? <img src={user.photo_url} alt="profil" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : user?.name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+              }
+            </div>
+            <div style={{ position: 'absolute', bottom: 0, right: 0, width: 16, height: 16, background: C.lat, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, border: `1.5px solid ${C.esp}` }}>📷</div>
+            <input type="file" accept="image/*" capture="user" style={{ display: 'none' }} onChange={async e => {
+              const file = e.target.files[0]
+              if (!file) return
+              const path = `photos/${user.id}_${Date.now()}.${file.name.split('.').pop()}`
+              const { data } = await supabase.storage.from('documents').upload(path, file, { upsert: true })
+              if (data) {
+                const { data: url } = supabase.storage.from('documents').getPublicUrl(path)
+                await supabase.from('employees').update({ photo_url: url.publicUrl }).eq('id', user.id)
+                useAuthStore.getState().refreshUser()
+              }
+            }} />
+          </label>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 500, color: C.crm }}>{user?.name}</div>
             <div style={{ fontSize: 10, color: C.lat }}>{user?.role}{user?.shift ? ` · Shift ${user.shift}` : ''}</div>
