@@ -118,42 +118,72 @@ function EmployeesTab({ employees, onRefresh }) {
   const [form, setForm] = useState({ name: '', role: '', phone: '', pin: '', shift: '', leave_balance: 12 })
   const [adding, setAdding] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [editingLeave, setEditingLeave] = useState(null)
+  const [editingId, setEditingId] = useState(null)
+  const [editForm, setEditForm] = useState({})
 
   async function addEmployee() {
     setSaving(true)
     await supabase.from('employees').insert({ ...form, leave_balance: parseInt(form.leave_balance) })
-    setSaving(false); setAdding(false); setForm({ name: '', role: '', phone: '', pin: '', shift: '', leave_balance: 12 }); onRefresh()
+    setSaving(false); setAdding(false)
+    setForm({ name: '', role: '', phone: '', pin: '', shift: '', leave_balance: 12 })
+    onRefresh()
   }
 
-  async function saveLeave(empId, balance) {
-    await supabase.from('employees').update({ leave_balance: parseInt(balance) }).eq('id', empId)
-    setEditingLeave(null); onRefresh()
+  function startEdit(emp) {
+    setEditingId(emp.id)
+    setEditForm({ name: emp.name, role: emp.role, phone: emp.phone, pin: '', shift: emp.shift || '', leave_balance: emp.leave_balance })
   }
+
+  async function saveEdit(empId) {
+    setSaving(true)
+    const updates = { name: editForm.name, role: editForm.role, phone: editForm.phone, shift: editForm.shift, leave_balance: parseInt(editForm.leave_balance) }
+    if (editForm.pin && editForm.pin.length >= 4) updates.pin = editForm.pin
+    await supabase.from('employees').update(updates).eq('id', empId)
+    setSaving(false); setEditingId(null); onRefresh()
+  }
+
+  async function deleteEmployee(empId, empName) {
+    if (!window.confirm(`Hapus karyawan "${empName}"? Data absensi tetap tersimpan.`)) return
+    await supabase.from('employees').delete().eq('id', empId)
+    onRefresh()
+  }
+
+  const fields = [['name','Nama Lengkap','text'],['role','Jabatan','text'],['phone','Nomor HP','tel'],['shift','Shift (opsional)','text']]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <Card>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '.75rem' }}>
-          <SectionTitle style={{ marginBottom: 0 }}>Data Karyawan ({employees.filter(e => !e.is_owner).length})</SectionTitle>
-          <button onClick={() => setAdding(!adding)} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: 'none', background: C.esp, color: C.crm, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}>
+          <div style={{ fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.1em', color: C.mut }}>
+            Data Karyawan ({employees.filter(e => !e.is_owner).length})
+          </div>
+          <button onClick={() => { setAdding(!adding); setEditingId(null) }}
+            style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: 'none', background: C.esp, color: C.crm, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}>
             {adding ? 'Batal' : '+ Tambah'}
           </button>
         </div>
 
         {adding && (
           <div style={{ background: C.crm, borderRadius: 10, padding: '12px', marginBottom: '1rem', border: '.5px solid #E0D4C3' }}>
-            {[['name','Nama Lengkap','text'],['role','Jabatan','text'],['phone','Nomor HP','tel'],['pin','PIN (6 digit)','password']].map(([k, lbl, t]) => (
+            <div style={{ fontSize: 11, fontWeight: 500, color: C.esp, marginBottom: 10 }}>Tambah Karyawan Baru</div>
+            {fields.map(([k, lbl, t]) => (
               <div key={k} style={{ marginBottom: 8 }}>
                 <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 3 }}>{lbl}</label>
                 <input type={t} value={form[k]} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))}
                   style={{ width: '100%', padding: '7px 10px', border: '.5px solid #C4A88A', borderRadius: 7, fontSize: 12, background: '#fff', color: C.esp, fontFamily: 'inherit' }} />
               </div>
             ))}
-            <div style={{ marginBottom: 8 }}>
-              <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 3 }}>Hak Cuti (hari/tahun)</label>
-              <input type="number" value={form.leave_balance} onChange={e => setForm(f => ({ ...f, leave_balance: e.target.value }))} min={0} max={30}
-                style={{ width: 80, padding: '7px 10px', border: '.5px solid #C4A88A', borderRadius: 7, fontSize: 12, background: '#fff', color: C.esp, fontFamily: 'inherit' }} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+              <div>
+                <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 3 }}>PIN (min. 4 digit)</label>
+                <input type="password" value={form.pin} onChange={e => setForm(f => ({ ...f, pin: e.target.value }))} maxLength={6}
+                  style={{ width: '100%', padding: '7px 10px', border: '.5px solid #C4A88A', borderRadius: 7, fontSize: 12, background: '#fff', color: C.esp, fontFamily: 'inherit' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 3 }}>Hak Cuti (hari/tahun)</label>
+                <input type="number" value={form.leave_balance} onChange={e => setForm(f => ({ ...f, leave_balance: e.target.value }))} min={0} max={30}
+                  style={{ width: '100%', padding: '7px 10px', border: '.5px solid #C4A88A', borderRadius: 7, fontSize: 12, background: '#fff', color: C.esp, fontFamily: 'inherit' }} />
+              </div>
             </div>
             <button onClick={addEmployee} disabled={saving || !form.name || !form.phone || !form.pin}
               style={{ padding: '8px 16px', background: C.esp, color: C.crm, border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -163,34 +193,68 @@ function EmployeesTab({ employees, onRefresh }) {
         )}
 
         {employees.filter(e => !e.is_owner).map(emp => (
-          <div key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '.5px solid #F0E8DC' }}>
-            <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#8B9E7E', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 500, color: '#fff', flexShrink: 0 }}>
-              {emp.name?.split(' ').map(w => w[0]).join('').slice(0,2)}
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12, fontWeight: 500, color: C.esp }}>{emp.name}</div>
-              <div style={{ fontSize: 10, color: C.mut }}>{emp.role} {emp.phone}</div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              {editingLeave === emp.id ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <input type="number" defaultValue={emp.leave_balance} min={0} max={30} id={`lb-${emp.id}`}
-                    style={{ width: 50, padding: '3px 7px', border: '.5px solid #C4A88A', borderRadius: 6, fontSize: 12, background: C.crm, color: C.esp, fontFamily: 'inherit', textAlign: 'center' }} />
-                  <button onClick={() => saveLeave(emp.id, document.getElementById(`lb-${emp.id}`).value)}
-                    style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, border: `.5px solid ${C.okBd}`, background: C.okBg, color: C.ok, cursor: 'pointer', fontFamily: 'inherit' }}>✓</button>
+          <div key={emp.id}>
+            {editingId === emp.id ? (
+              <div style={{ background: C.infBg, border: `.5px solid ${C.infBd}`, borderRadius: 10, padding: '12px', marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 500, color: C.inf, marginBottom: 10 }}>Edit: {emp.name}</div>
+                {fields.map(([k, lbl, t]) => (
+                  <div key={k} style={{ marginBottom: 8 }}>
+                    <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 3 }}>{lbl}</label>
+                    <input type={t} value={editForm[k] || ''} onChange={e => setEditForm(f => ({ ...f, [k]: e.target.value }))}
+                      style={{ width: '100%', padding: '7px 10px', border: '.5px solid #C4A88A', borderRadius: 7, fontSize: 12, background: '#fff', color: C.esp, fontFamily: 'inherit' }} />
+                  </div>
+                ))}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 3 }}>PIN Baru (kosongkan jika tidak ubah)</label>
+                    <input type="password" value={editForm.pin || ''} onChange={e => setEditForm(f => ({ ...f, pin: e.target.value }))} maxLength={6} placeholder="••••••"
+                      style={{ width: '100%', padding: '7px 10px', border: '.5px solid #C4A88A', borderRadius: 7, fontSize: 12, background: '#fff', color: C.esp, fontFamily: 'inherit' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 3 }}>Hak Cuti (hari/tahun)</label>
+                    <input type="number" value={editForm.leave_balance || 0} onChange={e => setEditForm(f => ({ ...f, leave_balance: e.target.value }))} min={0} max={30}
+                      style={{ width: '100%', padding: '7px 10px', border: '.5px solid #C4A88A', borderRadius: 7, fontSize: 12, background: '#fff', color: C.esp, fontFamily: 'inherit' }} />
+                  </div>
                 </div>
-              ) : (
-                <button onClick={() => setEditingLeave(emp.id)} style={{ fontSize: 10, color: C.inf, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-                  Cuti: {emp.leave_balance} hr ✏️
-                </button>
-              )}
-            </div>
+                <div style={{ display: 'flex', gap: 7 }}>
+                  <button onClick={() => setEditingId(null)}
+                    style={{ padding: '7px 14px', background: 'transparent', color: C.mut, border: '.5px solid #C4A88A', borderRadius: 7, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Batal
+                  </button>
+                  <button onClick={() => saveEdit(emp.id)} disabled={saving}
+                    style={{ flex: 1, padding: '7px 14px', background: C.esp, color: C.crm, border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    {saving ? 'Menyimpan...' : '✓ Simpan Perubahan'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '.5px solid #F0E8DC' }}>
+                <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#8B9E7E', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 500, color: '#fff', flexShrink: 0 }}>
+                  {emp.name?.split(' ').map(w => w[0]).join('').slice(0,2)}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: C.esp }}>{emp.name}</div>
+                  <div style={{ fontSize: 10, color: C.mut }}>{emp.role} · {emp.phone} · Cuti: {emp.leave_balance} hr{emp.shift ? ` · ${emp.shift}` : ''}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+                  <button onClick={() => { startEdit(emp); setAdding(false) }}
+                    style={{ fontSize: 10, padding: '4px 10px', borderRadius: 6, border: `.5px solid ${C.infBd}`, background: C.infBg, color: C.inf, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}>
+                    ✏️ Edit
+                  </button>
+                  <button onClick={() => deleteEmployee(emp.id, emp.name)}
+                    style={{ fontSize: 10, padding: '4px 10px', borderRadius: 6, border: `.5px solid ${C.dngBd}`, background: C.dngBg, color: C.dng, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}>
+                    🗑
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </Card>
     </div>
   )
 }
+
 
 function ReportTab({ employees }) {
   const [month, setMonth] = useState(new Date().toISOString().slice(0,7))
@@ -317,10 +381,10 @@ function SettingsTab({ settings, onSave }) {
   function loadMap() {
     if (window.L) { setMapReady(true); return }
     const link = document.createElement('link')
-    link.rel = 'stylesheet'; link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+    link.rel = 'stylesheet'; link.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'
     document.head.appendChild(link)
     const script = document.createElement('script')
-    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'
     script.onload = () => setMapReady(true)
     document.head.appendChild(script)
   }
