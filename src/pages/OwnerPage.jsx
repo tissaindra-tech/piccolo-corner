@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../hooks/useAuth.js'
 import { supabase } from '../lib/supabase.js'
@@ -280,7 +280,62 @@ function SettingsTab({ settings, onSave }) {
   const [form, setForm] = useState(settings)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [mapReady, setMapReady] = useState(false)
+  const mapRef = useRef(null)
+  const mapInstanceRef = useRef(null)
+  const markerRef = useRef(null)
   useEffect(() => setForm(settings), [settings])
+
+  useEffect(() => {
+    if (!mapReady) return
+    const L = window.L
+    if (!L || mapInstanceRef.current) return
+    const lat = parseFloat(form.cafe_lat) || -8.6786
+    const lng = parseFloat(form.cafe_lng) || 115.2115
+    const map = L.map(mapRef.current, { center: [lat, lng], zoom: 17 })
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap'
+    }).addTo(map)
+    const icon = L.divIcon({
+      html: '<div style="background:#1C1208;width:16px;height:16px;border-radius:50%;border:3px solid #C4956A;"></div>',
+      iconSize: [16, 16], iconAnchor: [8, 8], className: ''
+    })
+    const marker = L.marker([lat, lng], { icon, draggable: true }).addTo(map)
+    marker.on('dragend', e => {
+      const pos = e.target.getLatLng()
+      setForm(f => ({ ...f, cafe_lat: parseFloat(pos.lat.toFixed(6)), cafe_lng: parseFloat(pos.lng.toFixed(6)) }))
+    })
+    map.on('click', e => {
+      marker.setLatLng(e.latlng)
+      setForm(f => ({ ...f, cafe_lat: parseFloat(e.latlng.lat.toFixed(6)), cafe_lng: parseFloat(e.latlng.lng.toFixed(6)) }))
+    })
+    mapInstanceRef.current = map
+    markerRef.current = marker
+    return () => { if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null } }
+  }, [mapReady])
+
+  function loadMap() {
+    if (window.L) { setMapReady(true); return }
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'; link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+    document.head.appendChild(link)
+    const script = document.createElement('script')
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+    script.onload = () => setMapReady(true)
+    document.head.appendChild(script)
+  }
+
+  function locateMe() {
+    if (!navigator.geolocation) return alert('GPS tidak tersedia')
+    navigator.geolocation.getCurrentPosition(pos => {
+      const { latitude: lat, longitude: lng } = pos.coords
+      setForm(f => ({ ...f, cafe_lat: parseFloat(lat.toFixed(6)), cafe_lng: parseFloat(lng.toFixed(6)) }))
+      if (mapInstanceRef.current && markerRef.current) {
+        mapInstanceRef.current.setView([lat, lng], 18)
+        markerRef.current.setLatLng([lat, lng])
+      }
+    }, () => alert('Izin GPS ditolak'))
+  }
 
   async function save() {
     setSaving(true)
@@ -290,35 +345,95 @@ function SettingsTab({ settings, onSave }) {
   }
 
   const fields = [
-    ['open_time', 'Jam Buka', 'time'], ['close_time', 'Jam Tutup', 'time'],
+    ['open_time', 'Jam Buka', 'time'],
+    ['close_time', 'Jam Tutup', 'time'],
     ['late_tolerance_minutes', 'Toleransi Terlambat (menit)', 'number'],
     ['gps_radius_meters', 'Radius GPS (meter)', 'number'],
     ['doc_upload_deadline_days', 'Batas Upload Dokter (hari)', 'number'],
-    ['cafe_lat', 'Koordinat Cafe — Latitude', 'number'],
-    ['cafe_lng', 'Koordinat Cafe — Longitude', 'number'],
   ]
 
   return (
-    <Card>
-      <SectionTitle>Pengaturan Jam & Operasional</SectionTitle>
-      {fields.map(([k, lbl, t]) => (
-        <div key={k} style={{ marginBottom: 10 }}>
-          <label style={{ fontSize: 11, fontWeight: 500, color: C.mut, display: 'block', marginBottom: 4 }}>{lbl}</label>
-          <input type={t} value={form[k] || ''} step={t === 'number' && (k.includes('lat') || k.includes('lng')) ? 0.0001 : 1}
-            onChange={e => setForm(f => ({ ...f, [k]: t === 'number' ? parseFloat(e.target.value) || e.target.value : e.target.value }))}
-            style={{ padding: '8px 12px', border: '.5px solid #C4A88A', borderRadius: 8, fontSize: 13, background: C.crm, color: C.esp, fontFamily: 'inherit', width: t === 'number' ? 120 : 140 }} />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Card>
+        <SectionTitle>Jam & Operasional</SectionTitle>
+        {fields.map(([k, lbl, t]) => (
+          <div key={k} style={{ marginBottom: 10 }}>
+            <label style={{ fontSize: 11, fontWeight: 500, color: C.mut, display: 'block', marginBottom: 4 }}>{lbl}</label>
+            <input type={t} value={form[k] || ''} min={1} step={1}
+              onChange={e => setForm(f => ({ ...f, [k]: t === 'number' ? parseFloat(e.target.value) || e.target.value : e.target.value }))}
+              style={{ padding: '8px 12px', border: '.5px solid #C4A88A', borderRadius: 8, fontSize: 13, background: C.crm, color: C.esp, fontFamily: 'inherit', width: t === 'number' ? 120 : 140 }} />
+          </div>
+        ))}
+      </Card>
+
+      <Card>
+        <SectionTitle>Lokasi Cafe — Titik GPS</SectionTitle>
+        <div style={{ background: C.infBg, border: `.5px solid ${C.infBd}`, borderRadius: 9, padding: '8px 12px', fontSize: 11, color: C.inf, marginBottom: 12, lineHeight: 1.5 }}>
+          Klik <strong>"Buka Peta"</strong> → geser pin ke lokasi cafe → koordinat otomatis tersimpan. Atau klik <strong>"Lokasi Saya"</strong> jika sedang di cafe.
         </div>
-      ))}
-      <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: 10 }}>
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+          <button onClick={loadMap}
+            style={{ padding: '8px 14px', background: C.esp, color: C.crm, border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+            🗺 Buka Peta
+          </button>
+          <button onClick={locateMe}
+            style={{ padding: '8px 14px', background: C.okBg, color: C.ok, border: `.5px solid ${C.okBd}`, borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+            📍 Lokasi Saya (jika di cafe)
+          </button>
+        </div>
+
+        {mapReady && (
+          <div ref={mapRef} style={{ width: '100%', height: 280, borderRadius: 10, border: `.5px solid #E0D4C3`, marginBottom: 10, overflow: 'hidden' }} />
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div>
+            <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 4 }}>Latitude</label>
+            <input type="number" value={form.cafe_lat || ''} step={0.000001}
+              onChange={e => {
+                const v = parseFloat(e.target.value)
+                setForm(f => ({ ...f, cafe_lat: v }))
+                if (mapInstanceRef.current && markerRef.current && !isNaN(v)) {
+                  markerRef.current.setLatLng([v, form.cafe_lng])
+                  mapInstanceRef.current.setView([v, form.cafe_lng])
+                }
+              }}
+              style={{ width: '100%', padding: '8px 10px', border: `.5px solid #C4A88A`, borderRadius: 8, fontSize: 12, background: C.crm, color: C.esp, fontFamily: 'inherit' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 4 }}>Longitude</label>
+            <input type="number" value={form.cafe_lng || ''} step={0.000001}
+              onChange={e => {
+                const v = parseFloat(e.target.value)
+                setForm(f => ({ ...f, cafe_lng: v }))
+                if (mapInstanceRef.current && markerRef.current && !isNaN(v)) {
+                  markerRef.current.setLatLng([form.cafe_lat, v])
+                  mapInstanceRef.current.setView([form.cafe_lat, v])
+                }
+              }}
+              style={{ width: '100%', padding: '8px 10px', border: `.5px solid #C4A88A`, borderRadius: 8, fontSize: 12, background: C.crm, color: C.esp, fontFamily: 'inherit' }} />
+          </div>
+        </div>
+
+        {form.cafe_lat && form.cafe_lng && (
+          <div style={{ marginTop: 8, fontSize: 11, color: C.ok, background: C.okBg, border: `.5px solid ${C.okBd}`, borderRadius: 7, padding: '6px 10px' }}>
+            ✓ Koordinat: {parseFloat(form.cafe_lat).toFixed(6)}, {parseFloat(form.cafe_lng).toFixed(6)}
+          </div>
+        )}
+      </Card>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={save} disabled={saving}
-          style={{ padding: '9px 20px', background: C.esp, color: C.crm, border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
-          {saving ? 'Menyimpan...' : '✓ Simpan Pengaturan'}
+          style={{ padding: '10px 22px', background: C.esp, color: C.crm, border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+          {saving ? 'Menyimpan...' : '✓ Simpan Semua Pengaturan'}
         </button>
-        {saved && <span style={{ fontSize: 12, color: C.ok }}>✓ Tersimpan — berlaku sekarang</span>}
+        {saved && <span style={{ fontSize: 12, color: C.ok }}>✓ Tersimpan!</span>}
       </div>
-    </Card>
+    </div>
   )
 }
+
 
 // ─── MAIN OWNER PAGE ─────────────────────────────────────────────────────────
 export default function OwnerPage() {
