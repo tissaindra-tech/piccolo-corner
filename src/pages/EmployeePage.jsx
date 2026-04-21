@@ -57,7 +57,7 @@ export default function EmployeePage() {
   }
 
   async function fetchToday() {
-    const today = new Date().toISOString().split('T')[0]
+    const d = new Date(); const today = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
     const { data } = await supabase.from('attendance').select('*').eq('employee_id', user.id).eq('date', today).single()
     setTodayRecord(data || null)
   }
@@ -150,7 +150,7 @@ export default function EmployeePage() {
 
     const selfieUrl = await uploadSelfie(selfieData, pendingAction)
     const now = new Date()
-    const today = now.toISOString().split('T')[0]
+    const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
 
     if (pendingAction === 'checkin') {
       const [oh, om] = settings.open_time.split(':').map(Number)
@@ -187,7 +187,7 @@ export default function EmployeePage() {
 
   async function submitLeave(type) {
     setSubmitting(true)
-    const today = new Date().toISOString().split('T')[0]
+    const d = new Date(); const today = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
     let docUrl = null
     if (docFile) {
       const ext = docFile.name.split('.').pop()
@@ -252,7 +252,8 @@ export default function EmployeePage() {
               if (data) {
                 const { data: url } = supabase.storage.from('documents').getPublicUrl(path)
                 await supabase.from('employees').update({ photo_url: url.publicUrl }).eq('id', user.id)
-                useAuthStore.getState().refreshUser()
+                await fetchHistory()
+                window.location.reload()
               }
             }} />
           </label>
