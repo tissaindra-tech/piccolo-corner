@@ -120,9 +120,11 @@ function EmployeesTab({ employees, onRefresh }) {
   const [saving, setSaving] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({})
+  const [uploadingId, setUploadingId] = useState(null)
 
   async function addEmployee() {
     setSaving(true)
+    if (!form.name || !form.phone || form.pin.length < 4) { setSaving(false); return }
     await supabase.from('employees').insert({ ...form, leave_balance: parseInt(form.leave_balance) })
     setSaving(false); setAdding(false)
     setForm({ name: '', role: '', phone: '', pin: '', shift: '', leave_balance: 12 })
@@ -148,7 +150,23 @@ function EmployeesTab({ employees, onRefresh }) {
     onRefresh()
   }
 
-  const fields = [['name','Nama Lengkap','text'],['role','Jabatan','text'],['phone','Nomor HP','tel'],['shift','Shift (opsional)','text']]
+  async function uploadFile(empId, file, type) {
+    if (!file) return
+    setUploadingId(empId + type)
+    const ext = file.name.split('.').pop()
+    const path = `${type}/${empId}_${Date.now()}.${ext}`
+    const { data, error } = await supabase.storage.from('documents').upload(path, file, { upsert: true })
+    if (data) {
+      const { data: url } = supabase.storage.from('documents').getPublicUrl(path)
+      const field = type === 'ktp' ? 'ktp_url' : 'photo_url'
+      await supabase.from('employees').update({ [field]: url.publicUrl }).eq('id', empId)
+      onRefresh()
+    }
+    setUploadingId(null)
+  }
+
+  const inputStyle = { width: '100%', padding: '7px 10px', border: '.5px solid #C4A88A', borderRadius: 7, fontSize: 12, background: '#fff', color: C.esp, fontFamily: 'inherit' }
+  const pinInputStyle = { ...inputStyle, letterSpacing: '0.2em', fontWeight: 500 }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -166,56 +184,108 @@ function EmployeesTab({ employees, onRefresh }) {
         {adding && (
           <div style={{ background: C.crm, borderRadius: 10, padding: '12px', marginBottom: '1rem', border: '.5px solid #E0D4C3' }}>
             <div style={{ fontSize: 11, fontWeight: 500, color: C.esp, marginBottom: 10 }}>Tambah Karyawan Baru</div>
-            {fields.map(([k, lbl, t]) => (
+            {[['name','Nama Lengkap','text'],['role','Jabatan','text'],['shift','Shift (opsional)','text']].map(([k, lbl, t]) => (
               <div key={k} style={{ marginBottom: 8 }}>
                 <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 3 }}>{lbl}</label>
-                <input type={t} value={form[k]} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))}
-                  style={{ width: '100%', padding: '7px 10px', border: '.5px solid #C4A88A', borderRadius: 7, fontSize: 12, background: '#fff', color: C.esp, fontFamily: 'inherit' }} />
+                <input type={t} value={form[k]} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))} style={inputStyle} />
               </div>
             ))}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+            <div style={{ marginBottom: 8 }}>
+              <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 3 }}>Nomor HP</label>
+              <input type="tel" inputMode="numeric" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="08xxxxxxxxxx" style={inputStyle} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
               <div>
-                <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 3 }}>PIN (min. 4 digit)</label>
-                <input type="password" value={form.pin} onChange={e => setForm(f => ({ ...f, pin: e.target.value }))} maxLength={6}
-                  style={{ width: '100%', padding: '7px 10px', border: '.5px solid #C4A88A', borderRadius: 7, fontSize: 12, background: '#fff', color: C.esp, fontFamily: 'inherit' }} />
+                <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 3 }}>PIN (4–6 angka) <span style={{ color: C.dng }}>*</span></label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  value={form.pin}
+                  onChange={e => { const v = e.target.value.replace(/[^0-9]/g,''); setForm(f => ({ ...f, pin: v })) }}
+                  placeholder="contoh: 123456"
+                  style={pinInputStyle}
+                />
+                <div style={{ fontSize: 10, color: C.mut, marginTop: 2 }}>Ketik angka saja</div>
               </div>
               <div>
                 <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 3 }}>Hak Cuti (hari/tahun)</label>
-                <input type="number" value={form.leave_balance} onChange={e => setForm(f => ({ ...f, leave_balance: e.target.value }))} min={0} max={30}
-                  style={{ width: '100%', padding: '7px 10px', border: '.5px solid #C4A88A', borderRadius: 7, fontSize: 12, background: '#fff', color: C.esp, fontFamily: 'inherit' }} />
+                <input type="number" inputMode="numeric" value={form.leave_balance} onChange={e => setForm(f => ({ ...f, leave_balance: e.target.value }))} min={0} max={30} style={inputStyle} />
               </div>
             </div>
-            <button onClick={addEmployee} disabled={saving || !form.name || !form.phone || !form.pin}
-              style={{ padding: '8px 16px', background: C.esp, color: C.crm, border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <button onClick={addEmployee} disabled={saving || !form.name || !form.phone || form.pin.length < 4}
+              style={{ padding: '8px 16px', background: form.name && form.phone && form.pin.length >= 4 ? C.esp : '#ccc', color: C.crm, border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>
               {saving ? 'Menyimpan...' : 'Simpan Karyawan'}
             </button>
           </div>
         )}
 
         {employees.filter(e => !e.is_owner).map(emp => (
-          <div key={emp.id}>
+          <div key={emp.id} style={{ borderBottom: '.5px solid #F0E8DC' }}>
             {editingId === emp.id ? (
-              <div style={{ background: C.infBg, border: `.5px solid ${C.infBd}`, borderRadius: 10, padding: '12px', marginBottom: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 500, color: C.inf, marginBottom: 10 }}>Edit: {emp.name}</div>
-                {fields.map(([k, lbl, t]) => (
+              <div style={{ background: C.infBg, border: `.5px solid ${C.infBd}`, borderRadius: 10, padding: '12px', margin: '6px 0' }}>
+                <div style={{ fontSize: 11, fontWeight: 500, color: C.inf, marginBottom: 10 }}>Edit Data: {emp.name}</div>
+                {[['name','Nama Lengkap','text'],['role','Jabatan','text'],['shift','Shift (opsional)','text']].map(([k, lbl, t]) => (
                   <div key={k} style={{ marginBottom: 8 }}>
                     <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 3 }}>{lbl}</label>
-                    <input type={t} value={editForm[k] || ''} onChange={e => setEditForm(f => ({ ...f, [k]: e.target.value }))}
-                      style={{ width: '100%', padding: '7px 10px', border: '.5px solid #C4A88A', borderRadius: 7, fontSize: 12, background: '#fff', color: C.esp, fontFamily: 'inherit' }} />
+                    <input type={t} value={editForm[k] || ''} onChange={e => setEditForm(f => ({ ...f, [k]: e.target.value }))} style={inputStyle} />
                   </div>
                 ))}
+                <div style={{ marginBottom: 8 }}>
+                  <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 3 }}>Nomor HP</label>
+                  <input type="tel" inputMode="numeric" value={editForm.phone || ''} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} style={inputStyle} />
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
                   <div>
                     <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 3 }}>PIN Baru (kosongkan jika tidak ubah)</label>
-                    <input type="password" value={editForm.pin || ''} onChange={e => setEditForm(f => ({ ...f, pin: e.target.value }))} maxLength={6} placeholder="••••••"
-                      style={{ width: '100%', padding: '7px 10px', border: '.5px solid #C4A88A', borderRadius: 7, fontSize: 12, background: '#fff', color: C.esp, fontFamily: 'inherit' }} />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={6}
+                      value={editForm.pin || ''}
+                      onChange={e => { const v = e.target.value.replace(/[^0-9]/g,''); setEditForm(f => ({ ...f, pin: v })) }}
+                      placeholder="angka baru..."
+                      style={pinInputStyle}
+                    />
+                    <div style={{ fontSize: 10, color: C.mut, marginTop: 2 }}>Ketik angka saja</div>
                   </div>
                   <div>
                     <label style={{ fontSize: 11, color: C.mut, display: 'block', marginBottom: 3 }}>Hak Cuti (hari/tahun)</label>
-                    <input type="number" value={editForm.leave_balance || 0} onChange={e => setEditForm(f => ({ ...f, leave_balance: e.target.value }))} min={0} max={30}
-                      style={{ width: '100%', padding: '7px 10px', border: '.5px solid #C4A88A', borderRadius: 7, fontSize: 12, background: '#fff', color: C.esp, fontFamily: 'inherit' }} />
+                    <input type="number" inputMode="numeric" value={editForm.leave_balance || 0} onChange={e => setEditForm(f => ({ ...f, leave_balance: e.target.value }))} min={0} max={30} style={inputStyle} />
                   </div>
                 </div>
+
+                <div style={{ marginBottom: 10, padding: '10px', background: 'rgba(255,255,255,0.6)', borderRadius: 8, border: '.5px solid #C4A88A' }}>
+                  <div style={{ fontSize: 11, fontWeight: 500, color: C.esp, marginBottom: 8 }}>📎 Upload Dokumen Karyawan</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div>
+                      <label style={{ fontSize: 10, color: C.mut, display: 'block', marginBottom: 4 }}>Foto KTP</label>
+                      {emp.ktp_url && (
+                        <a href={emp.ktp_url} target="_blank" rel="noreferrer"
+                          style={{ display: 'block', fontSize: 10, color: C.ok, marginBottom: 4, textDecoration: 'none' }}>
+                          ✓ Lihat KTP →
+                        </a>
+                      )}
+                      <label style={{ display: 'block', padding: '6px 10px', background: emp.ktp_url ? C.okBg : C.crm, border: `.5px dashed ${emp.ktp_url ? C.okBd : '#C4A88A'}`, borderRadius: 7, cursor: 'pointer', fontSize: 10, color: emp.ktp_url ? C.ok : C.mut, textAlign: 'center' }}>
+                        <input type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={e => uploadFile(emp.id, e.target.files[0], 'ktp')} />
+                        {uploadingId === emp.id + 'ktp' ? '⏳ Upload...' : emp.ktp_url ? '🔄 Ganti KTP' : '📤 Upload KTP'}
+                      </label>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, color: C.mut, display: 'block', marginBottom: 4 }}>Foto Profil</label>
+                      {emp.photo_url && (
+                        <img src={emp.photo_url} alt="foto" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', display: 'block', marginBottom: 4, border: `.5px solid ${C.okBd}` }} />
+                      )}
+                      <label style={{ display: 'block', padding: '6px 10px', background: emp.photo_url ? C.okBg : C.crm, border: `.5px dashed ${emp.photo_url ? C.okBd : '#C4A88A'}`, borderRadius: 7, cursor: 'pointer', fontSize: 10, color: emp.photo_url ? C.ok : C.mut, textAlign: 'center' }}>
+                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadFile(emp.id, e.target.files[0], 'photos')} />
+                        {uploadingId === emp.id + 'photos' ? '⏳ Upload...' : emp.photo_url ? '🔄 Ganti Foto' : '📤 Upload Foto'}
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
                 <div style={{ display: 'flex', gap: 7 }}>
                   <button onClick={() => setEditingId(null)}
                     style={{ padding: '7px 14px', background: 'transparent', color: C.mut, border: '.5px solid #C4A88A', borderRadius: 7, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -228,12 +298,18 @@ function EmployeesTab({ employees, onRefresh }) {
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '.5px solid #F0E8DC' }}>
-                <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#8B9E7E', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 500, color: '#fff', flexShrink: 0 }}>
-                  {emp.name?.split(' ').map(w => w[0]).join('').slice(0,2)}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0' }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#8B9E7E', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 500, color: '#fff', flexShrink: 0, overflow: 'hidden' }}>
+                  {emp.photo_url
+                    ? <img src={emp.photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : emp.name?.split(' ').map(w => w[0]).join('').slice(0,2)
+                  }
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: C.esp }}>{emp.name}</div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: C.esp, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    {emp.name}
+                    {emp.ktp_url && <span style={{ fontSize: 9, background: C.okBg, color: C.ok, padding: '1px 5px', borderRadius: 4 }}>KTP ✓</span>}
+                  </div>
                   <div style={{ fontSize: 10, color: C.mut }}>{emp.role} · {emp.phone} · Cuti: {emp.leave_balance} hr{emp.shift ? ` · ${emp.shift}` : ''}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
