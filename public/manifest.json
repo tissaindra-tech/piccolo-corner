@@ -1,0 +1,13 @@
+{
+  "name": "Piccolo Corner Absensi",
+  "short_name": "Piccolo",
+  "description": "Sistem absensi karyawan Piccolo Corner",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FBF7F2",
+  "theme_color": "#1C1208",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
