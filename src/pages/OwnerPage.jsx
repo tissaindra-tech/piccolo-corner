@@ -31,40 +31,93 @@ function SectionTitle({ children }) {
 
 function LogTab({ employees, today }) {
   const [logs, setLogs] = useState([])
-  useEffect(() => { fetchLogs() }, [today])
-  async function fetchLogs() {
-    const { data } = await supabase.from('attendance').select('*, employees(name,role)').eq('date', today).order('check_in', { ascending: false })
+  const [loading, setLoading] = useState(true)
+  const [selfieView, setSelfieView] = useState(null)
+  const [viewDate, setViewDate] = useState(today)
+
+  useEffect(() => { fetchLogs(viewDate) }, [viewDate])
+
+  async function fetchLogs(date) {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('attendance')
+      .select('*, employees(name, role, photo_url)')
+      .eq('date', date)
+      .order('check_in', { ascending: false })
+    if (error) console.error('LogTab error:', error)
     setLogs(data || [])
+    setLoading(false)
   }
-  const stats = { hadir: 0, sakit: 0, cuti: 0, ctb: 0, total: employees.length }
+
+  const stats = { hadir: 0, sakit: 0, cuti: 0, ctb: 0 }
   logs.forEach(l => { if (stats[l.status] !== undefined) stats[l.status]++ })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* Selfie lightbox */}
+      {selfieView && (
+        <div onClick={() => setSelfieView(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
+          <img src={selfieView} alt="selfie" style={{ maxWidth: '90vw', maxHeight: '80vh', borderRadius: 12, objectFit: 'contain' }} />
+          <div style={{ color: '#fff', fontSize: 12, opacity: .7 }}>Tap untuk tutup</div>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
         {[['Hadir', stats.hadir, C.ok], ['Sakit', stats.sakit, C.inf], ['Cuti', stats.cuti, C.ok], ['CTB', stats.ctb, C.pur]].map(([l, v, c]) => (
           <Card key={l} style={{ textAlign: 'center', padding: '.75rem' }}>
             <div style={{ fontSize: 10, color: C.mut, marginBottom: 4 }}>{l}</div>
-            <div style={{ fontSize: 24, fontWeight: 500, color: c, fontFamily: 'Georgia,serif' }}>{v}</div>
+            <div style={{ fontSize: 22, fontWeight: 500, color: c, fontFamily: 'Georgia,serif' }}>{v}</div>
           </Card>
         ))}
       </div>
+
       <Card>
-        <SectionTitle>Absensi Hari Ini</SectionTitle>
-        {logs.length === 0 && <div style={{ fontSize: 12, color: C.mut, textAlign: 'center', padding: '1rem' }}>Belum ada data hari ini</div>}
-        {logs.map(l => (
-          <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '.5px solid #F0E8DC' }}>
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.lat, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 500, color: C.esp, flexShrink: 0 }}>
-              {l.employees?.name?.split(' ').map(w => w[0]).join('').slice(0,2)}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <SectionTitle style={{ margin: 0 }}>Log Absensi</SectionTitle>
+            <input type="date" value={viewDate} onChange={e => setViewDate(e.target.value)}
+              style={{ fontSize: 11, padding: '4px 8px', border: '.5px solid #C4A88A', borderRadius: 7, background: C.crm, color: C.esp, fontFamily: 'inherit' }} />
+          </div>
+          <button onClick={() => fetchLogs(viewDate)}
+            style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: `.5px solid #C4A88A`, background: 'transparent', color: C.mut, cursor: 'pointer', fontFamily: 'inherit' }}>
+            ↻ Refresh
+          </button>
+        </div>
+
+        {loading && <div style={{ fontSize: 12, color: C.mut, textAlign: 'center', padding: '1rem' }}>Memuat data...</div>}
+        {!loading && logs.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '1rem' }}>
+            <div style={{ fontSize: 12, color: C.mut, marginBottom: 6 }}>Belum ada data untuk tanggal ini</div>
+            <div style={{ fontSize: 11, color: C.dng }}>Tanggal: {viewDate}</div>
+          </div>
+        )}
+        {!loading && logs.map(l => (
+          <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '.5px solid #F0E8DC' }}>
+            <div style={{ width: 32, height: 32, borderRadius: '50%', background: C.lat, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 500, color: C.esp, flexShrink: 0, overflow: 'hidden' }}>
+              {l.employees?.photo_url
+                ? <img src={l.employees.photo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : l.employees?.name?.split(' ').map(w => w[0]).join('').slice(0,2)
+              }
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 500, color: C.esp }}>{l.employees?.name}</div>
-              <div style={{ fontSize: 10, color: C.mut }}>{l.employees?.role}</div>
+              <div style={{ fontSize: 10, color: C.mut, display: 'flex', alignItems: 'center', gap: 6 }}>
+                {l.employees?.role}
+                {l.is_late && <span style={{ background: C.wrnBg, color: C.wrn, padding: '1px 5px', borderRadius: 4, fontSize: 9 }}>+{l.late_minutes}m terlambat</span>}
+              </div>
             </div>
-            <div style={{ textAlign: 'right', fontSize: 11, color: C.mut }}>
-              {l.check_in && new Date(l.check_in).toTimeString().slice(0,5)}
-              {l.gps_dist_in != null && <span style={{ marginLeft: 4, fontSize: 10, color: C.ok }}>· {l.gps_dist_in}m</span>}
+            <div style={{ textAlign: 'right', fontSize: 11, color: C.mut, flexShrink: 0 }}>
+              {l.check_in && <div>{new Date(l.check_in).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar' })}</div>}
+              {l.check_out && <div style={{ fontSize: 10 }}>↩ {new Date(l.check_out).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar' })}</div>}
+              {l.gps_dist_in != null && <div style={{ fontSize: 9, color: C.ok }}>{l.gps_dist_in}m GPS</div>}
             </div>
+            {l.doc_url && l.doc_url.includes('selfie') && (
+              <div onClick={() => setSelfieView(l.doc_url)}
+                style={{ width: 32, height: 32, borderRadius: 6, overflow: 'hidden', cursor: 'pointer', border: `.5px solid ${C.okBd}`, flexShrink: 0 }}>
+                <img src={l.doc_url} alt="selfie" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </div>
+            )}
             <Badge status={l.status} />
           </div>
         ))}
@@ -583,7 +636,10 @@ export default function OwnerPage() {
   const [tab, setTab] = useState('log')
   const [employees, setEmployees] = useState([])
   const [settings, setSettings] = useState({})
-  const today = new Date().toISOString().split('T')[0]
+  const today = (() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  })()
 
   useEffect(() => { fetchAll() }, [])
   async function fetchAll() {
