@@ -114,22 +114,21 @@ export default function EmployeePage() {
     // Ontime ≤10:30 = +Rp10.000 | Telat 1-5m = -Rp2.000 | 6-30m = -Rp6.000 | >30m = -Rp10.000
     // Izin Tugas dari owner = +Rp10.000 (ontime penuh)
     const thisMonth = localToday().slice(0, 7)
-    const { data: myAtt } = await supabase.from('attendance').select('status,is_late,late_minutes,is_excused,excuse_reason').eq('employee_id', user.id).gte('date', thisMonth + '-01')
-    if (myAtt) {
-      let totalRp = 0
-      myAtt.forEach(a => {
-        if (a.status === 'hadir') {
-          if (a.is_excused) totalRp += 10000      // Izin tugas = ontime penuh
-          else if (!a.is_late) totalRp += 10000   // Ontime
-          else {
-            const m = a.late_minutes || 0
-            if (m <= 5) totalRp -= 2000
-            else if (m <= 30) totalRp -= 6000
-            else totalRp -= 10000
-          }
-        }
-      })
-      setPoints(totalRp)
+   const { data: myAtt } = await supabase.from('attendance').select('status,is_late,late_minutes,is_excused,excuse_reason,check_out').eq('employee_id', user.id).gte('date', thisMonth + '-01')
+if (myAtt) {
+  let totalRp = 0
+  myAtt.forEach(a => {
+    if (a.status === 'hadir') {
+      if (a.is_excused) totalRp += 10000      // Izin tugas = ontime penuh
+      else if (!a.is_late) totalRp += 10000   // Ontime
+      else totalRp -= 10000                    // Telat
+      if (a.check_out) {
+        const co = new Date(a.check_out)
+        if (co.getHours() * 60 + co.getMinutes() > 20 * 60) totalRp += 10000  // Bonus pulang di atas jam tutup
+      }
+    }
+  })
+  setPoints(totalRp)
     }
     const { data: allEmps } = await supabase.from('employees').select('id').eq('is_owner', false)
     if (allEmps) setTotalEmp(allEmps.length)
