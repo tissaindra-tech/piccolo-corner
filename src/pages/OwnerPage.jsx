@@ -1802,9 +1802,10 @@ function SettingsTab({settings:init,onSave}){
       if(mapInstanceRef.current&&markerRef.current){mapInstanceRef.current.setView([lat,lng],18);markerRef.current.setLatLng([lat,lng])}
     })
   }
-  async function save(){
+    async function save(){
     setSaving(true)
     await supabase.from('work_settings').update({...form,updated_at:new Date().toISOString()}).eq('id',1)
+    if(form.close_time) CLOSE_TIME_STR=form.close_time.slice(0,5)
     setSaving(false);setSaved(true);onSave(form);setTimeout(()=>setSaved(false),3000)
   }
   const inp={width:'100%',padding:'9px 11px',border:`.5px solid ${T.border}`,borderRadius:9,fontSize:13,background:T.bg,color:T.black,fontFamily:'inherit'}
@@ -1835,9 +1836,9 @@ function SettingsTab({settings:init,onSave}){
         </div>
         {form.incentive_program_active && (
           <div style={{background:'#DCFCE7',borderRadius:10,padding:'8px 12px',fontSize:11,color:'#166534',lineHeight:1.6}}>
-            + Ontime maks jam 10:30 = +Rp 10.000/hari<br/>
-            + Maks bonus per bulan = Rp 260.000<br/>
-            ✓ Telat setelah 11:00 = -Rp 10.000 (potong gaji)
+                        + Ontime maks jam {addMin(form.open_time,form.late_tolerance_minutes)} = +Rp 10.000/hari<br/>
+            + Pulang lewat jam {(form.close_time||'20:00').slice(0,5)} = +Rp 10.000/hari (bonus lembur)<br/>
+            ✓ Telat setelah jam {addMin(form.open_time,form.late_tolerance_minutes)} = -Rp 10.000 (potong gaji)
           </div>
         )}
         {!form.incentive_program_active && (
@@ -1903,8 +1904,7 @@ export default function OwnerPage(){
     const {data:emps}=await supabase.from('employees').select('*').order('name')
     if(emps) setEmployees(emps)
     const {data:s}=await supabase.from('work_settings').select('*').eq('id',1).single()
-    if(s) setSettings(s)
-    const {count}=await supabase.from('leave_requests').select('*',{count:'exact',head:true}).eq('status','pending')
+        if(s){ setSettings(s); if(s.close_time) CLOSE_TIME_STR=s.close_time.slice(0,5) }
     setPendingCount(count||0)
   }
 
