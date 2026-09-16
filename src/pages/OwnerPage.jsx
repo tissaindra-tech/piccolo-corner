@@ -29,18 +29,28 @@ function fmtDur(inIso,outIso){
   const diff=Math.round((new Date(outIso)-new Date(inIso))/60000)
   return `${Math.floor(diff/60)}j ${diff%60}m`
 }
+let CLOSE_TIME_STR='20:00'
+function addMin(hhmm,min){
+  if(!hhmm) return '-'
+  const [h,m]=hhmm.slice(0,5).split(':').map(Number)
+  const total=h*60+m+Number(min||0)
+  const hh=String(Math.floor(total/60)%24).padStart(2,'0')
+  const mm=String(total%60).padStart(2,'0')
+  return `${hh}:${mm}`
+}
 function calcIncentiveRp(att){
-  // Ontime (check-in <=10:30) = +10.000 | Telat (>10:30) = -10.000 flat
-  // Bonus pulang di atas jam tutup (20:00) = +10.000
+  // Ontime (check-in <= Jam Buka+Toleransi) = +10.000 | Telat = -10.000 flat
+  // Bonus pulang di atas Jam Tutup (dari Pengaturan) = +10.000
   if(!att) return 0
   if(att.status!=='hadir') return 0
   let total=0
-  if(att.is_excused) total+=10000  // izin tugas = ontime penuh
+  if(att.is_excused) total+=10000
   else if(!att.is_late) total+=10000
   else total-=10000
   if(att.check_out){
     const co=new Date(att.check_out)
-    if(co.getHours()*60+co.getMinutes()>20*60) total+=10000
+    const [ch,cm]=CLOSE_TIME_STR.split(':').map(Number)
+    if(co.getHours()*60+co.getMinutes()>ch*60+cm) total+=10000
   }
   return total
 }
