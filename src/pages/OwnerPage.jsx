@@ -44,7 +44,6 @@ function calcIncentiveRp(att){
   }
   return total
 }
-}
 function fmtRp(val){
   const abs=Math.abs(val).toLocaleString('id-ID')
   return val>=0?`+Rp ${abs}`:`-Rp ${abs}`
