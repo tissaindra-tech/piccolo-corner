@@ -30,15 +30,20 @@ function fmtDur(inIso,outIso){
   return `${Math.floor(diff/60)}j ${diff%60}m`
 }
 function calcIncentiveRp(att){
-  // Ontime <=10:30 = +10.000 | Telat 1-5m = -2.000 | 6-30m = -6.000 | >30m = -10.000
+  // Ontime (check-in <=10:30) = +10.000 | Telat (>10:30) = -10.000 flat
+  // Bonus pulang di atas jam tutup (20:00) = +10.000
   if(!att) return 0
   if(att.status!=='hadir') return 0
-  if(att.is_excused) return 10000  // izin tugas = ontime penuh
-  if(!att.is_late) return 10000
-  const m=att.late_minutes||0
-  if(m<=5) return -2000
-  if(m<=30) return -6000
-  return -10000
+  let total=0
+  if(att.is_excused) total+=10000  // izin tugas = ontime penuh
+  else if(!att.is_late) total+=10000
+  else total-=10000
+  if(att.check_out){
+    const co=new Date(att.check_out)
+    if(co.getHours()*60+co.getMinutes()>20*60) total+=10000
+  }
+  return total
+}
 }
 function fmtRp(val){
   const abs=Math.abs(val).toLocaleString('id-ID')
