@@ -124,10 +124,11 @@ if (myAtt) {
       else totalRp -= 10000                    // Telat
       if (a.check_out) {
         const co = new Date(a.check_out)
-        if (co.getHours() * 60 + co.getMinutes() > 20 * 60) totalRp += 10000  // Bonus pulang di atas jam tutup
+              if (a.check_out) {
+        const co = new Date(a.check_out)
+        const [ch, cm] = (s?.close_time || '20:00').slice(0, 5).split(':').map(Number)
+        if (co.getHours() * 60 + co.getMinutes() > ch * 60 + cm) totalRp += 10000  // Bonus pulang di atas jam tutup (dari Pengaturan)
       }
-    }
-  })
   setPoints(totalRp)
     }
     const { data: allEmps } = await supabase.from('employees').select('id').eq('is_owner', false)
