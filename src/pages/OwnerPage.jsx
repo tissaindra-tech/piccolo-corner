@@ -1864,7 +1864,6 @@ function SettingsTab({settings:init,onSave}){
           </div>
         ))}
       </div>
-           </div>
       <div style={{background:T.surface,borderRadius:16,padding:14,border:`.5px solid ${T.border}`}}>
         <div style={{fontSize:12,fontWeight:700,color:T.black,marginBottom:2}}>Batas & Nominal Insentif</div>
         <div style={{fontSize:10,color:T.muted,marginBottom:10}}>Terpisah dari Jam & Operasional — ubah di sini tidak mengubah jam buka/tutup cafe</div>
