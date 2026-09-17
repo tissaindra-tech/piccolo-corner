@@ -30,6 +30,7 @@ function fmtDur(inIso,outIso){
   return `${Math.floor(diff/60)}j ${diff%60}m`
 }
 let CLOSE_TIME_STR='20:00'
+let INC={ontimeCutoff:'10:30',ontimeBonus:10000,latePenalty:10000,overtimeCutoff:'20:30',overtimeBonus:10000}
 function addMin(hhmm,min){
   if(!hhmm) return '-'
   const [h,m]=hhmm.slice(0,5).split(':').map(Number)
@@ -44,13 +45,13 @@ function calcIncentiveRp(att){
   if(!att) return 0
   if(att.status!=='hadir') return 0
   let total=0
-  if(att.is_excused) total+=10000
-  else if(!att.is_late) total+=10000
-  else total-=10000
+    if(att.is_excused) total+=INC.ontimeBonus
+  else if(!att.is_late) total+=INC.ontimeBonus
+  else total-=INC.latePenalty
   if(att.check_out){
     const co=new Date(att.check_out)
-    const [ch,cm]=CLOSE_TIME_STR.split(':').map(Number)
-    if(co.getHours()*60+co.getMinutes()>ch*60+cm) total+=10000
+    const [ch,cm]=INC.overtimeCutoff.split(':').map(Number)
+    if(co.getHours()*60+co.getMinutes()>ch*60+cm) total+=INC.overtimeBonus
   }
   return total
 }
@@ -1805,7 +1806,8 @@ function SettingsTab({settings:init,onSave}){
     async function save(){
     setSaving(true)
     await supabase.from('work_settings').update({...form,updated_at:new Date().toISOString()}).eq('id',1)
-    if(form.close_time) CLOSE_TIME_STR=form.close_time.slice(0,5)
+        if(form.close_time) CLOSE_TIME_STR=form.close_time.slice(0,5)
+    INC={ontimeCutoff:(form.incentive_ontime_cutoff||'10:30').slice(0,5),ontimeBonus:Number(form.incentive_ontime_bonus)||10000,latePenalty:Number(form.incentive_late_penalty)||10000,overtimeCutoff:(form.incentive_overtime_cutoff||'20:30').slice(0,5),overtimeBonus:Number(form.incentive_overtime_bonus)||10000}
     setSaving(false);setSaved(true);onSave(form);setTimeout(()=>setSaved(false),3000)
   }
   const inp={width:'100%',padding:'9px 11px',border:`.5px solid ${T.border}`,borderRadius:9,fontSize:13,background:T.bg,color:T.black,fontFamily:'inherit'}
@@ -1836,9 +1838,9 @@ function SettingsTab({settings:init,onSave}){
         </div>
         {form.incentive_program_active && (
           <div style={{background:'#DCFCE7',borderRadius:10,padding:'8px 12px',fontSize:11,color:'#166534',lineHeight:1.6}}>
-                        + Ontime maks jam {addMin(form.open_time,form.late_tolerance_minutes)} = +Rp 10.000/hari<br/>
-            + Pulang lewat jam {(form.close_time||'20:00').slice(0,5)} = +Rp 10.000/hari (bonus lembur)<br/>
-            ✓ Telat setelah jam {addMin(form.open_time,form.late_tolerance_minutes)} = -Rp 10.000 (potong gaji)
+                                                + Ontime maks jam {(form.incentive_ontime_cutoff||'10:30').slice(0,5)} = +Rp {Number(form.incentive_ontime_bonus||10000).toLocaleString('id-ID')}/hari<br/>
+            + Pulang lewat jam {(form.incentive_overtime_cutoff||'20:30').slice(0,5)} = +Rp {Number(form.incentive_overtime_bonus||10000).toLocaleString('id-ID')}/hari (bonus lembur)<br/>
+            ✓ Telat setelah jam {(form.incentive_ontime_cutoff||'10:30').slice(0,5)} = -Rp {Number(form.incentive_late_penalty||10000).toLocaleString('id-ID')} (potong gaji)
           </div>
         )}
         {!form.incentive_program_active && (
@@ -1856,6 +1858,17 @@ function SettingsTab({settings:init,onSave}){
       <div style={{background:T.surface,borderRadius:16,padding:14,border:`.5px solid ${T.border}`}}>
         <div style={{fontSize:12,fontWeight:700,color:T.black,marginBottom:10}}>Jam & Operasional</div>
         {[['open_time','Jam Buka','time'],['close_time','Jam Tutup','time'],['late_tolerance_minutes','Toleransi Terlambat (menit)','number'],['gps_radius_meters','Radius GPS (meter)','number'],['doc_upload_deadline_days','Batas Upload Dokter (hari)','number'],['uang_kehadiran_harian','Uang Kehadiran per Hari (Rp) — karyawan tetap','number']].map(([k,l,t])=>(
+          <div key={k} style={{marginBottom:9}}>
+            <div style={{fontSize:11,color:T.muted,marginBottom:3}}>{l}</div>
+            <input type={t} value={form[k]||''} step={1} onChange={e=>setForm(f=>({...f,[k]:t==='number'?parseFloat(e.target.value)||e.target.value:e.target.value}))} style={{...inp,width:t==='number'?130:160}}/>
+          </div>
+        ))}
+      </div>
+           </div>
+      <div style={{background:T.surface,borderRadius:16,padding:14,border:`.5px solid ${T.border}`}}>
+        <div style={{fontSize:12,fontWeight:700,color:T.black,marginBottom:2}}>Batas & Nominal Insentif</div>
+        <div style={{fontSize:10,color:T.muted,marginBottom:10}}>Terpisah dari Jam & Operasional — ubah di sini tidak mengubah jam buka/tutup cafe</div>
+        {[['incentive_ontime_cutoff','Batas Jam Ontime','time'],['incentive_ontime_bonus','Bonus Ontime (Rp/hari)','number'],['incentive_late_penalty','Potongan Telat (Rp)','number'],['incentive_overtime_cutoff','Batas Jam Lembur','time'],['incentive_overtime_bonus','Bonus Lembur (Rp/hari)','number']].map(([k,l,t])=>(
           <div key={k} style={{marginBottom:9}}>
             <div style={{fontSize:11,color:T.muted,marginBottom:3}}>{l}</div>
             <input type={t} value={form[k]||''} step={1} onChange={e=>setForm(f=>({...f,[k]:t==='number'?parseFloat(e.target.value)||e.target.value:e.target.value}))} style={{...inp,width:t==='number'?130:160}}/>
@@ -1904,7 +1917,11 @@ export default function OwnerPage(){
     const {data:emps}=await supabase.from('employees').select('*').order('name')
     if(emps) setEmployees(emps)
     const {data:s}=await supabase.from('work_settings').select('*').eq('id',1).single()
-        if(s){ setSettings(s); if(s.close_time) CLOSE_TIME_STR=s.close_time.slice(0,5) }
+                if(s){
+      setSettings(s)
+      if(s.close_time) CLOSE_TIME_STR=s.close_time.slice(0,5)
+      INC={ontimeCutoff:(s.incentive_ontime_cutoff||'10:30').slice(0,5),ontimeBonus:Number(s.incentive_ontime_bonus)||10000,latePenalty:Number(s.incentive_late_penalty)||10000,overtimeCutoff:(s.incentive_overtime_cutoff||'20:30').slice(0,5),overtimeBonus:Number(s.incentive_overtime_bonus)||10000}
+    }
     setPendingCount(count||0)
   }
 
