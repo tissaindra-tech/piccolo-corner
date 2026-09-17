@@ -59,7 +59,7 @@ export default function EmployeePage() {
   const [tab, setTab] = useState('home')
   const [gpsState, setGpsState] = useState('idle')
   const [gpsInfo, setGpsInfo] = useState(null)
-  const [settings, setSettings] = useState({ cafe_lat: -8.7162, cafe_lng: 115.2108, gps_radius_meters: 100, open_time: '10:00', late_tolerance_minutes: 15, doc_upload_deadline_days: 3, notif_message: '' })
+    const [settings, setSettings] = useState({ cafe_lat: -8.7162, cafe_lng: 115.2108, gps_radius_meters: 100, open_time: '10:00', late_tolerance_minutes: 15, doc_upload_deadline_days: 3, notif_message: '', incentive_ontime_cutoff: '10:30', incentive_ontime_bonus: 10000, incentive_late_penalty: 10000, incentive_overtime_cutoff: '20:30', incentive_overtime_bonus: 10000 })
   const [todayRecord, setTodayRecord] = useState(null)
   const [history, setHistory] = useState([])
   const [leaveBalance, setLeaveBalance] = useState(user?.leave_balance || 0)
@@ -115,17 +115,20 @@ export default function EmployeePage() {
     // Izin Tugas dari owner = +Rp10.000 (ontime penuh)
        const thisMonth = localToday().slice(0, 7)
     const { data: myAtt } = await supabase.from('attendance').select('status,is_late,late_minutes,is_excused,excuse_reason,check_out').eq('employee_id', user.id).gte('date', thisMonth + '-01')
-    if (myAtt) {
+        if (myAtt) {
+      const ontimeBonus = Number(s?.incentive_ontime_bonus) || 10000
+      const latePenalty = Number(s?.incentive_late_penalty) || 10000
+      const overtimeBonus = Number(s?.incentive_overtime_bonus) || 10000
+      const [ch, cm] = (s?.incentive_overtime_cutoff || '20:30').slice(0, 5).split(':').map(Number)
       let totalRp = 0
       myAtt.forEach(a => {
         if (a.status === 'hadir') {
-          if (a.is_excused) totalRp += 10000      // Izin tugas = ontime penuh
-          else if (!a.is_late) totalRp += 10000   // Ontime
-          else totalRp -= 10000                    // Telat
+          if (a.is_excused) totalRp += ontimeBonus
+          else if (!a.is_late) totalRp += ontimeBonus
+          else totalRp -= latePenalty
           if (a.check_out) {
             const co = new Date(a.check_out)
-            const [ch, cm] = (s?.close_time || '20:00').slice(0, 5).split(':').map(Number)
-            if (co.getHours() * 60 + co.getMinutes() > ch * 60 + cm) totalRp += 10000  // Bonus pulang di atas jam tutup (dari Pengaturan)
+            if (co.getHours() * 60 + co.getMinutes() > ch * 60 + cm) totalRp += overtimeBonus
           }
         }
       })
@@ -216,10 +219,11 @@ export default function EmployeePage() {
 
     if (pendingAction === 'checkin') {
       // ── CHECK IN ──────────────────────────────────────────
-      const [oh, om] = settings.open_time.split(':').map(Number)
+           const [oh, om] = settings.open_time.split(':').map(Number)
       const nowMs = now.getHours() * 60 + now.getMinutes()
       const openMs = oh * 60 + om
-      const isLate = nowMs > openMs + (settings.late_tolerance_minutes || 15)
+      const [coh, com] = (settings.incentive_ontime_cutoff || '10:30').slice(0,5).split(':').map(Number)
+      const isLate = nowMs > (coh * 60 + com)
       const lateMinutes = isLate ? nowMs - openMs : 0
 
       const { error } = await supabase.from('attendance').upsert({
