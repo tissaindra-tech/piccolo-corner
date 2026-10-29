@@ -15,7 +15,7 @@ export const useAuthStore = create(
           const { data, error } = await supabase
             .from('employees')
             .select('*')
-            .eq('phone', phone.trim())
+            .eq('phone', phone.replace(/\D/g, ''))
             .eq('pin', pin.trim())
             .single()
           if (error || !data) throw new Error('Nomor HP atau PIN salah')
