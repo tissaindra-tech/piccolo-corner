@@ -515,7 +515,7 @@ function EmployeesTab({employees,onRefresh}){
     setSaving(true)
     const isDW=form.tipe_karyawan==='dw_magang'||form.tipe_karyawan==='dw_fullday'
     await supabase.from('employees').insert({
-      name:form.name,role:form.role,phone:form.phone,pin:form.pin,shift:form.shift,
+      name:form.name,role:form.role,phone:form.phone.replace(/\D/g,''),pin:form.pin.trim(),shift:form.shift,
       leave_balance:parseInt(form.leave_balance),
       tipe_karyawan:form.tipe_karyawan||'tetap',
       tanggal_masuk:form.tanggal_masuk||null,
@@ -529,7 +529,7 @@ function EmployeesTab({employees,onRefresh}){
   async function saveEdit(id){
     setSaving(true)
     const isDW=editForm.tipe_karyawan==='dw_magang'||editForm.tipe_karyawan==='dw_fullday'
-    const u={name:editForm.name,role:editForm.role,phone:editForm.phone,shift:editForm.shift,leave_balance:parseInt(editForm.leave_balance),tipe_karyawan:editForm.tipe_karyawan||'tetap',tanggal_masuk:editForm.tanggal_masuk||null,incentive_enabled:isDW?false:editForm.incentive_enabled,gaji_pokok:isDW?0:(parseInt(editForm.gaji_pokok)||0),tunjangan:isDW?[]:(editForm.tunjangan||[])}
+    const u={name:editForm.name,role:editForm.role,phone:(editForm.phone||'').replace(/\D/g,''),shift:editForm.shift,leave_balance:parseInt(editForm.leave_balance),tipe_karyawan:editForm.tipe_karyawan||'tetap',tanggal_masuk:editForm.tanggal_masuk||null,incentive_enabled:isDW?false:editForm.incentive_enabled,gaji_pokok:isDW?0:(parseInt(editForm.gaji_pokok)||0),tunjangan:isDW?[]:(editForm.tunjangan||[])}
     if(editForm.pin?.length>=4) u.pin=editForm.pin
     await supabase.from('employees').update(u).eq('id',id)
     setSaving(false);setEditingId(null);onRefresh()
